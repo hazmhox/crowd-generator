@@ -17,9 +17,10 @@ namespace CrowdGeneratorPlugin
     public class CrowdGenerator : MVRScript
     {
 		// JSONStorables
-		public JSONStorableBool ToggleEditTilesParameters;
-		public JSONStorableBool ToggleAnimateTilesParameters;
-		public JSONStorableBool ToggleMaterialParameters;
+		public JSONStorableBool ToggleCharactersParameters;
+		public JSONStorableBool ToggleCrowdParameters;
+		public JSONStorableBool ToggleAnimationParameters;
+		public JSONStorableBool ToggleSeedParameters;
 	
 		public JSONStorableStringChooser CharacterToSpawn;
 		protected List<string> CharactersChoices;
@@ -33,6 +34,7 @@ namespace CrowdGeneratorPlugin
 		public JSONStorableFloat CrowdLines;
 		public JSONStorableFloat CrowdMinDistance;
 		public JSONStorableFloat CrowdRandOffset;
+		public JSONStorableFloat CrowdRandOffsetZ;
 		public JSONStorableFloat CrowdRandRotation;
 		public JSONStorableBool CrowdIsCircular;
 		public JSONStorableFloat CrowdRadius;
@@ -142,6 +144,11 @@ namespace CrowdGeneratorPlugin
 				/* ************* COLORS ************** */
 				HSVColor hsvcDefault = HSVColorPicker.RGBToHSV(1f, 1f, 1f);
 				
+				/* ************* JSONSTORABLES OPTIONS TOGGLE ************** */
+				ToggleCharactersParameters = new JSONStorableBool("Show Characters parameters", true, ToggleCharactersParametersCallback){ isStorable = false };
+				ToggleCrowdParameters = new JSONStorableBool("Show Crowd parameters", false, ToggleCrowdParametersCallback){ isStorable = false };
+				ToggleAnimationParameters = new JSONStorableBool("Show Animation parameters", false, ToggleAnimationParametersCallback){ isStorable = false };
+				ToggleSeedParameters = new JSONStorableBool("Show Seed parameters", false, ToggleSeedParametersCallback){ isStorable = false };
 				
 				/* ************* JSONSTORABLES ************** */
 				CharacterToSpawn = new JSONStorableStringChooser("Character", CharactersChoices, "All", "Character");
@@ -175,10 +182,13 @@ namespace CrowdGeneratorPlugin
 				CrowdMinDistance = new JSONStorableFloat("Crowd Min Distance", 1f, 0.1f, 5f);
 				CrowdMinDistance.setCallbackFunction += (val) => { CrowdMinDistance.valNoCallback = val; CreateCrowd(); };
 				
-				CrowdRandOffset = new JSONStorableFloat("Crowd Random Offset", 0.2f, 0f, 5f);
+				CrowdRandOffset = new JSONStorableFloat("Crowd Random Offset (left/right)", 0.2f, 0f, 5f);
 				CrowdRandOffset.setCallbackFunction += (val) => { CrowdRandOffset.valNoCallback = val; CreateCrowd(); };
 				
-				CrowdRandRotation = new JSONStorableFloat("Crowd Random Rotation", 15f, 0f, 90f);
+				CrowdRandOffsetZ = new JSONStorableFloat("Crowd Random Offset (forward/backward)", 0.2f, 0f, 5f);
+				CrowdRandOffsetZ.setCallbackFunction += (val) => { CrowdRandOffsetZ.valNoCallback = val; CreateCrowd(); };
+				
+				CrowdRandRotation = new JSONStorableFloat("Crowd Random Rotation", 15f, 0f, 180f);
 				CrowdRandRotation.setCallbackFunction += (val) => { CrowdRandRotation.valNoCallback = val; CreateCrowd(); };
 
 				CrowdIsCircular = new JSONStorableBool("Generate Circular Crowd", false);
@@ -224,8 +234,11 @@ namespace CrowdGeneratorPlugin
 					"This editor allows you to customize how your crowd is generated.\n\n" +
 					"<b>Character settings</b>\nAll parameters to configure how the characters are selected.\n\n<i>Find The Interloper</i> makes a unique, strange, peculiar character appear in the crowd. (Only one is available at the moment)\n\n" +
 					"<b>Crowd settings</b>\nAll parameters to configure how the crowd is generated.\n\n" +
+					"<i>Crowd min distance</i> will only work for non-circular generation.\n\n" +
+					"<i>Generate uniform crowd</i> will disable all random parameters (offset, rotation...) to make the crowd spawn in a really homogenous manner. Use it to make crowd that have synced behaviors.\n\n" +
 					"<b>Animation parameters</b>\nAll parameters to configure how the characters in the crowd are animated.\n\n" +
-					"<b>Seed parameters</b>\nControls how the characters, crowd and animation looks and keep it when reloading the scene.\n\nA seed is used to produce random numbers, if the seed is always the same, the random numbers will always be the same. The number doesn't matter, just select a value and check how your crowd looks.\n\nIt will allow you to keep a consistent crowd everytime the scene is reloaded. You can have a seed for each part of the crowd generator. If a seed is at zero it means it will be random everytime the scene is loaded.\n\n" +
+					"<i>Uniform animation</i> will disable all random parameters to have all the animations play from the start. Use it to sync all the animations.\n\n" +
+					"<b>Seed parameters</b>\nControls how the characters, crowd and animation looks and keep it when reloading the scene.\n\nA seed is used to produce random numbers, if the seed is always the same, the random numbers will always be the same. The number doesn't matter, just select a value and check how your crowd looks.\n\nIt will allow you to keep a consistent crowd everytime the scene is reloaded. You can have a seed for each part of the crowd generator.\n\n" +
 					"</size></color>"
 				);
 							
@@ -239,6 +252,7 @@ namespace CrowdGeneratorPlugin
 				RegisterFloat(CrowdLines);
 				RegisterFloat(CrowdMinDistance);
 				RegisterFloat(CrowdRandOffset);
+				RegisterFloat(CrowdRandOffsetZ);
 				RegisterFloat(CrowdRandRotation);
 				RegisterBool(CrowdIsCircular);
 				RegisterFloat(CrowdRadius);
@@ -428,9 +442,14 @@ namespace CrowdGeneratorPlugin
 			UIDynamicToggle tmpToggle;
 			UIDynamicColorPicker tmpColor;
 			UIDynamicTextField tmpTextfield;
+			UIDynamic tmpSpacer;
+			
 			
 			// Characters stuff
-			charactersParamsUIElements = new UIDynamic[12];
+			charactersParamsUIElements = new UIDynamic[6];
+			
+			tmpToggle = CreateToggle(ToggleCharactersParameters);
+			allUIToggles.Add(tmpToggle);
 
 			tmpTextfield = createStaticDescriptionText("Characters settings","<color=#000><size=35><b>Characters settings</b></size>\n<size=28>How are the characters generated</size></color>",false,75);
 			allUITextFields.Add( tmpTextfield );
@@ -444,7 +463,7 @@ namespace CrowdGeneratorPlugin
 			CMdp.labelWidth = 180f;
 			charactersParamsUIElements[2] = (UIDynamic)CMdp;
 			
-			tmpColor = CreateColorPicker(CharactersMaterialColor, true);
+			tmpColor = CreateColorPicker(CharactersMaterialColor);
 			allUIColorPickers.Add(tmpColor);
 			charactersParamsUIElements[3] = (UIDynamic)tmpColor;
 			
@@ -452,9 +471,15 @@ namespace CrowdGeneratorPlugin
 			allUIToggles.Add(tmpToggle);
 			charactersParamsUIElements[4] = (UIDynamic)tmpToggle;
 
+			tmpSpacer = CreateSpacer();
+			allUISpacers.Add(tmpSpacer);
+			charactersParamsUIElements[5] = tmpSpacer;
 
 			// Crowd settings
-			crowdParamsUIElements = new UIDynamic[15];
+			crowdParamsUIElements = new UIDynamic[14];
+			
+			tmpToggle = CreateToggle(ToggleCrowdParameters);
+			allUIToggles.Add(tmpToggle);
 			
 			tmpTextfield = createStaticDescriptionText("Crowd settings","<color=#000><size=35><b>Crowd settings</b></size>\n<size=28>How the crowd is generated</size></color>",false,75);
 			allUITextFields.Add( tmpTextfield );
@@ -476,37 +501,49 @@ namespace CrowdGeneratorPlugin
 			allUISliders.Add(tmpSlider);
 			crowdParamsUIElements[4] = (UIDynamic)tmpSlider;
 			
-			tmpSlider = CreateSlider(CrowdRandRotation);
+			tmpSlider = CreateSlider(CrowdRandOffsetZ);
 			allUISliders.Add(tmpSlider);
 			crowdParamsUIElements[5] = (UIDynamic)tmpSlider;
+			
+			tmpSlider = CreateSlider(CrowdRandRotation);
+			allUISliders.Add(tmpSlider);
+			crowdParamsUIElements[6] = (UIDynamic)tmpSlider;
 
 			tmpToggle = CreateToggle(CrowdIsCircular,false);
 			allUIToggles.Add(tmpToggle);
-			crowdParamsUIElements[6] = (UIDynamic)tmpToggle;
+			crowdParamsUIElements[7] = (UIDynamic)tmpToggle;
 			
 			tmpSlider = CreateSlider(CrowdRadius);
 			allUISliders.Add(tmpSlider);
-			crowdParamsUIElements[7] = (UIDynamic)tmpSlider;
+			crowdParamsUIElements[8] = (UIDynamic)tmpSlider;
 			
 			tmpSlider = CreateSlider(CrowdCircumference);
 			allUISliders.Add(tmpSlider);
-			crowdParamsUIElements[8] = (UIDynamic)tmpSlider;
+			crowdParamsUIElements[9] = (UIDynamic)tmpSlider;
 			
 			tmpToggle = CreateToggle(CrowdFlipRotation,false);
 			allUIToggles.Add(tmpToggle);
-			crowdParamsUIElements[9] = (UIDynamic)tmpToggle;
+			crowdParamsUIElements[10] = (UIDynamic)tmpToggle;
 			
 			tmpToggle = CreateToggle(CrowdIsUniform,false);
 			allUIToggles.Add(tmpToggle);
-			crowdParamsUIElements[10] = (UIDynamic)tmpToggle;
+			crowdParamsUIElements[11] = (UIDynamic)tmpToggle;
 
 			tmpSlider = CreateSlider(CrowdIdleChance);
 			allUISliders.Add(tmpSlider);
-			crowdParamsUIElements[11] = (UIDynamic)tmpSlider;
+			crowdParamsUIElements[12] = (UIDynamic)tmpSlider;
+			
+			tmpSpacer = CreateSpacer();
+			allUISpacers.Add(tmpSpacer);
+			crowdParamsUIElements[13] = tmpSpacer;
+
 			
 			// Anim settings
-			animParamsUIElements = new UIDynamic[10];
+			animParamsUIElements = new UIDynamic[6];
 
+			tmpToggle = CreateToggle(ToggleAnimationParameters);
+			allUIToggles.Add(tmpToggle);
+			
 			tmpTextfield = createStaticDescriptionText("Animation settings","<color=#000><size=35><b>Animation settings</b></size>\n<size=28>All animation related options</size></color>",false,75);
 			allUITextFields.Add( tmpTextfield );
 			animParamsUIElements[0] = (UIDynamic)tmpTextfield;
@@ -527,9 +564,16 @@ namespace CrowdGeneratorPlugin
 			allUISliders.Add(tmpSlider);
 			animParamsUIElements[4] = (UIDynamic)tmpSlider;
 
+			tmpSpacer = CreateSpacer();
+			allUISpacers.Add(tmpSpacer);
+			animParamsUIElements[5] = tmpSpacer;
+			
 			
 			// Seeds settings
-			seedParamsUIElements = new UIDynamic[4];
+			seedParamsUIElements = new UIDynamic[5];
+			
+			tmpToggle = CreateToggle(ToggleSeedParameters);
+			allUIToggles.Add(tmpToggle);
 			
 			tmpTextfield = createStaticDescriptionText("Seed settings","<color=#000><size=35><b>Seed settings</b></size>\n<size=28>Control how the crowd looks and keep it when reloading the scene</size></color>",false,115);
 			allUITextFields.Add( tmpTextfield );
@@ -547,14 +591,18 @@ namespace CrowdGeneratorPlugin
 			allUISliders.Add(tmpSlider);
 			seedParamsUIElements[3] = (UIDynamic)tmpSlider;
 			
+			tmpSpacer = CreateSpacer();
+			allUISpacers.Add(tmpSpacer);
+			seedParamsUIElements[4] = tmpSpacer;
 			
 			
 			HelpUIElement = CreateTextField(_helpText, true);
 			HelpUIElement.height = 900.0f;
 			
-			//ToggleEditTilesParametersCallback(true);
-			//ToggleAnimateTilesParametersCallback(false);
-			//ToggleMaterialParametersCallback(false);
+			ToggleCharactersParametersCallback(true);
+			ToggleCrowdParametersCallback(false);
+			ToggleAnimationParametersCallback(false);
+			ToggleSeedParametersCallback(false);
 		}
 		
 		// Function clearing the whole CUA UI
@@ -632,8 +680,7 @@ namespace CrowdGeneratorPlugin
 			for( var i = 0; i < CrowdLines.val; i++ ) {
 				var CharPerLine = Mathf.Ceil(CrowdSize.val / CrowdLines.val);
 				for( var j = 0; j < CharPerLine; j++ ) {
-					// Checking if we got a seed
-					if( CrowdSeed.val > 0 ) UnityEngine.Random.seed = (int)CrowdSeed.val + spawnedCharacters;
+					UnityEngine.Random.seed = (int)CrowdSeed.val + spawnedCharacters;
 					
 					// Position and rotation depending on the type of spawn
 					if( CrowdIsCircular.val == false ) {
@@ -642,14 +689,19 @@ namespace CrowdGeneratorPlugin
 					} else {
 						var rCount = CrowdCircumference.val < 360 ? CharPerLine - 1 : CharPerLine;
 						float angle = j * ( CrowdCircumference.val * Mathf.PI / 180 ) / rCount;
-						float cYRot = - ((CrowdCircumference.val / rCount) * j - 90f);
+						float rndRotY = 0f;
+						if( CrowdIsUniform.val == false ) {
+							rndRotY = UnityEngine.Random.Range(-CrowdRandRotation.val, CrowdRandRotation.val);
+						}
+						
+						float cYRot = - ((CrowdCircumference.val / rCount) * j - 90f + rndRotY);
 						if( CrowdFlipRotation.val == true ) cYRot += 180f;
 						
 						float addOffsetX = 0f;
 						float addOffsetZ = 0f;
 						if( CrowdIsUniform.val == false ) {
 							addOffsetX = UnityEngine.Random.Range(-CrowdRandOffset.val, CrowdRandOffset.val);
-							addOffsetZ = UnityEngine.Random.Range(-CrowdRandOffset.val, CrowdRandOffset.val);
+							addOffsetZ = UnityEngine.Random.Range(-CrowdRandOffsetZ.val, CrowdRandOffsetZ.val);
 						}
 						xPos = Mathf.Cos(angle) * lineRadius + addOffsetX;
 						yPos = Mathf.Sin(angle)*lineRadius + addOffsetZ;
@@ -694,12 +746,7 @@ namespace CrowdGeneratorPlugin
 			int originalSeed =  UnityEngine.Random.seed;
 			Transform newChara;
 			if( CharacterToSpawn.val == "All" ) {
-				if( CharactersSeed.val > 0 ) {
-					UnityEngine.Random.seed = (int)CharactersSeed.val + spawnedCharacters;
-				} else {
-					// I need to "randomize it" again because the main loop enforce the seed
-					UnityEngine.Random.seed = Time.frameCount + spawnedCharacters;
-				}
+				UnityEngine.Random.seed = (int)CharactersSeed.val + spawnedCharacters;
 				
 				if( CharactersFindTheInterloper.val == false || interloperSpawned == true ) {
 					newChara = CharactersSelectionPool[ UnityEngine.Random.Range(0, CharactersSelectionPool.Count) ];
@@ -731,7 +778,7 @@ namespace CrowdGeneratorPlugin
 			float rndFOffset = 0f;
 			if( CrowdIsUniform.val == false ) {
 				rndHOffset = UnityEngine.Random.Range(-CrowdRandOffset.val, CrowdRandOffset.val);
-				rndFOffset = UnityEngine.Random.Range(-CrowdRandOffset.val, CrowdRandOffset.val);
+				rndFOffset = UnityEngine.Random.Range(-CrowdRandOffsetZ.val, CrowdRandOffsetZ.val);
 			}
 			
 			return new Vector3(hOffset + rndHOffset,0,fOffset + rndFOffset);
@@ -758,13 +805,8 @@ namespace CrowdGeneratorPlugin
 			if( AnimationToUse.val != "All" ) return animId = AnimationsList.IndexOf( AnimationToUse.val) - 1;
 			
 			int originalSeed =  UnityEngine.Random.seed;
-			if( AnimSeed.val > 0 ) {
-				UnityEngine.Random.seed = (int)AnimSeed.val + spawnedCharacters;
-			} else {
-				// I need to "randomize it" again because the main loop enforce the seed
-				UnityEngine.Random.seed = Time.frameCount + spawnedCharacters;
-			}
-			
+			UnityEngine.Random.seed = (int)AnimSeed.val + spawnedCharacters;
+
 			int randStart = 4;
 			if(  UnityEngine.Random.Range(0f, 1f) < CrowdIdleChance.val ) randStart = 0;
 			animId = UnityEngine.Random.Range(randStart, 16);
@@ -793,6 +835,10 @@ namespace CrowdGeneratorPlugin
 		private void SetCharacterMaterial( Transform character ) {
 			if( CharactersMaterial.val == "Default" ) return;
 			Material newMaterial = MaterialPool[ CharactersMaterialChoices.IndexOf( CharactersMaterial.val ) - 1 ];
+			
+			Color newColor = new Color(CharactersMaterialColor.colorPicker.currentColor.r, CharactersMaterialColor.colorPicker.currentColor.g, CharactersMaterialColor.colorPicker.currentColor.b, 1f);
+			newMaterial.SetColor("_Color",newColor);
+			
 			foreach ( SkinnedMeshRenderer smr in character.gameObject.GetComponentsInChildren(typeof(SkinnedMeshRenderer)) ) {
 				Material[] currentMats = smr.materials;
 				for ( var i = 0; i < currentMats.Length; i++ ) {
@@ -806,7 +852,9 @@ namespace CrowdGeneratorPlugin
 			return UnityEngine.Random.Range(0f, 1f);
 		}
 		
-		protected void ToggleEditTilesParametersCallback(bool enabled) {
+		protected void ToggleCharactersParametersCallback(bool enabled)
+		{
+			if (charactersParamsUIElements == null) return;
 			foreach( UIDynamic uidElem in charactersParamsUIElements ) {
 				if( enabled == true ) {
 					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(1,1,1);
@@ -818,8 +866,35 @@ namespace CrowdGeneratorPlugin
 			}
 		}
 		
-		protected void ToggleAnimateTilesParametersCallback(bool enabled) {
+		protected void ToggleCrowdParametersCallback(bool enabled) {
+			if (crowdParamsUIElements == null) return;
 			foreach( UIDynamic uidElem in crowdParamsUIElements ) {
+				if( enabled == true ) {
+					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(1,1,1);
+					uidElem.GetComponent<LayoutElement>().ignoreLayout = false;
+				} else {
+					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(0,0,0);
+					uidElem.GetComponent<LayoutElement>().ignoreLayout = true;
+				}
+			}
+		}
+		
+		protected void ToggleAnimationParametersCallback(bool enabled) {
+			if (animParamsUIElements == null) return;
+			foreach( UIDynamic uidElem in animParamsUIElements ) {
+				if( enabled == true ) {
+					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(1,1,1);
+					uidElem.GetComponent<LayoutElement>().ignoreLayout = false;
+				} else {
+					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(0,0,0);
+					uidElem.GetComponent<LayoutElement>().ignoreLayout = true;
+				}
+			}
+		}
+		
+		protected void ToggleSeedParametersCallback(bool enabled) {
+			if (seedParamsUIElements == null) return;
+			foreach( UIDynamic uidElem in seedParamsUIElements ) {
 				if( enabled == true ) {
 					uidElem.GetComponent<LayoutElement>().transform.localScale = new Vector3(1,1,1);
 					uidElem.GetComponent<LayoutElement>().ignoreLayout = false;
