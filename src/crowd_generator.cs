@@ -10,6 +10,7 @@ using System.IO;
 using MeshVR;
 
 // CrowdGenerator v1.0
+// Crowd Generator for Virt-A-Mate
 
 namespace CrowdGeneratorPlugin
 {
